@@ -1,0 +1,82 @@
+---
+title: "SPRIS Project 3: RCT for Cognitive Deficits"
+author: "Soohyun Kim (sk4382), "
+abstract: 
+thanks:
+keywords: 
+date: 
+output:
+    pdf_document:
+    highlight: default
+    number_sections: true
+    citation_package:
+    keep_tex: false
+    fig_caption: true
+    latex_engine: pdflatex
+fontsize: 11pt
+geometry: margin=1in
+bibliography:
+biblio-style:
+header-includes:
+- \usepackage{indentfirst}
+- \usepackage{graphicx}
+- \usepackage{geometry}
+- \usepackage{subfigure}
+- \usepackage{amsmath}
+- \usepackage{listings}
+- \usepackage{tikz}
+- \usetikzlibrary{matrix}
+- \usepackage{bm}
+---
+
+```{r setup, include = FALSE}
+
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, comment = "")
+library(MASS)
+library(readr)
+library(tidyverse)
+library(kableExtra) 
+library(tidyverse)
+library(tibble)
+library(ggpubr)
+library(gridExtra)
+library(ggfortify)
+library(lme4) 
+library(reshape2) 
+options(knitr.table.format = "latex")
+
+```
+
+# Background
+
+Cognitive deficits (e.g. poor memory, poor attention) are common problems among
+individuals with schizophrenia (SCZ). A randomized trial was conducted to test whether
+stimulation of dopamine-1 receptors in the brain via a full, selective agonist (DAR0100A) would improve cognitive deficits in schizophrenia. A total of 47 clinically stable individuals with SCZ were randomized to treatment with either 1) high dose (15mg) DAR-0100A, 2) low dose (0.5mg) DAR-0100A, or 3) placebo (normal saline).
+
+# Study Design
+
+The study drug (DAR-0100A) must be administered via intravenous infusion and done within an inpatient setting due to the possibility of adverse outcomes including fainting. Individuals were admitted to an inpatient clinic for a total of 19 days. On day 0 (prior to beginning the infusion of the study drug) subjects completed a battery of cognitive ratings. Then for 5 days they received the study drug and at the end of day 5 they completed the same battery of cognitive ratings. After 10 days without the drug, they were again given the drug from Day 15 to Day 19. At the end of Day 19 subjects again completed the same battery of cognitive ratings. The individuals were then released from the inpatient setting and on Day 90 returned to the study site to complete a final battery of the same cognitive ratings. The cognitive ratings were combined into a composite memory score called MEM_Comp at each assessment time and this is its name in the dataset.
+
+# Data
+
+The dataset has 158 observations of the following six variables.
+
+- Subject_ID: 
+- Day: 
+- Age: 
+- Gender: 
+- Treatment_Group: 
+- MEM_Comp: Composite memory score
+
+# Objectives 
+
+The primary objective of the study was to assess whether DAR-0100A treatment at low (Treatment_group = B in associated data) or high dose (Treatment_group = C in associated data) compared to placebo (Treatment_group = A in associated data) is able to improve memory as measured by the MEM_comp rating. The MEM_comp is a computerized test that subjects take and higher values indicate better memory while lower values indicate poorer memory. Researchers were specifically interested in the treatment effects at day 5, 19, and 90 and also in whether the treatment effects differed over time. Missing data were a concern. Researchers were also interested in sensitivity analyses that can be used
+to assess the robustness of the missing data assumption.
+
+
+
+```{r}
+
+dat.schizo <- read_csv("./data.csv")
+
+```
