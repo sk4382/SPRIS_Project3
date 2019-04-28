@@ -1,0 +1,541 @@
+---
+title: "P9185 Group Project Two"
+subtitle: "A Crossover Study of Phase II Clinical Trial"
+author: "Soohyun Kim, Yujing Yao"
+date: "April 22, 2019"
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{makecell}
+- \usepackage{indentfirst}
+- \usepackage{graphicx}
+- \usepackage{geometry}
+- \usepackage{subfigure}
+- \usepackage{amsmath}
+- \usepackage{listings}
+- \usepackage{tikz}
+- \usetikzlibrary{matrix}
+output:
+  beamer_presentation:
+    slide_level: 2
+    toc: false
+    theme: "Madrid"
+    colortheme: "whale"
+    fonttheme: "structurebold"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, comment = "")
+library(tidyverse)
+library(ggpubr) # common legend
+library(kableExtra) # table
+library(grid)
+library(gridExtra)
+options(knitr.table.format = "latex")
+theme_set(theme_bw())
+```
+
+# Introduction 
+## Background
+- MATIK is a newly discovered, highly contagious viral skin disease that causes serious skin rash and infections in patients, and could even be life threatening.
+- Three medications, Pill A, Gel B and Gel C, among all the biological and animal studies, appeared to be promising. 
+- Phase I trials have already been conducted to determine their MTD. Researchers/clinicians conducted a crossover phase II trial.
+
+  + Pill A: 200 mg, once a day for 4 weeks;
+  + Gel B: 1\% gel concentration; three times a day on affected areas, daily use for 4 weeks;
+  + Gel C: 2\% gel concentration; once a day on affected areas, daily use for 4 weeks.
+  
+## Objective
+
+- Primary goal: safety and adherence profiles
+
+  + whether the medications are safe for patients;
+  + whether patients could easily adhere to medication schedules so that long term use is feasible.
+  
+- Secondary goal
+
+  + assess the correlation of Pharmacokinetics with adherence measures and the occurrence of adverse events;
+  + identify demographic factors associated with product adherence and whether they differ by product used (Pill or gel) or regimen (three times a day or once a day).
+
+
+# Method
+## Study Design
+- Phase 2, multi-site, randomized, open-label, three-arm crossover study
+- 180 MATIK patients were recruited from a variety of sites(but we assume no site effect in this study)
+- Study participants will be randomized to one of six regimen sequences
+
+Study Regimen of the Phase 2 randomized, three-arm crossover study
+![](regime.png)
+
+## Endpoint
+- Primary endpoint measures:
+
+  + Safety: The number of grade 2 or higher adverse events occurred during that week;
+  + Adherence: The number of days (out of 7 days) that patients are able to take pills or apply gels as prescribed.
+
+- Secondary endpoints:
+
+  + the viral loads in the blood plasma and affected skin tissues were measured at the beginning and at the end of each period. 
+
+## Data Description
+- demographic variables: age, gender and race 
+- outcome variables: adverse events, adherence, PK, Cumulative AE, Cumulative AD, change of PK(no missing values)
+![](variable.png){width=80%}
+
+## A summary of the sample characteristics
+![](desc.png){width=80%}
+
+## Visualization of demographic characteristics across six sequences
+```{r fig.height=6}
+############## 1.descriptive statistiscs
+#### 1.1 data manipulation
+# read the table
+base <- read.csv('baseline.csv')
+end <- read.csv('endpoints.csv') 
+a <- end
+# summary(a)
+# dim(a)
+# names(a)
+# adherence and safety
+# transform the dataset from wide format to long format
+demo <- base %>%
+  as.tibble() %>% 
+  select(.,age,race,gender)
+end.long <- cbind(end,demo) %>%
+  as.tibble() %>% 
+  gather(type, value, AE_pillA_week1:Adhere_gelC_week4) %>%
+  mutate(.,outcome = ifelse(substr(type, start = 1, stop = 2)=="AE", "AE", "Adhere"),
+         trt = gsub(".*_(.*)\\_.*", "\\1", type),
+         week = gsub(".*_(.*)_*\\.*", "\\1", type))%>%
+  select(.,-type)%>%
+  spread(.,outcome, value)
+# create period, and carryover covariate
+# change factor to char for nchar function
+end.long[,2:4] <- lapply(end.long[,2:4], as.character)
+primary.end <- end.long %>%
+  mutate(.,seq = ifelse(period1=="Pill A"& period2 == "Gel B",1,
+                        ifelse(period1=="Gel C"& period2 == "Pill A",2,
+                               ifelse(period1 == "Gel B"& period2=="Gel C",3,
+                                      ifelse(period1 == "Gel B"& period2=="Pill A",4,
+                                             ifelse(period1== "Pill A"& period2 =="Gel C",5,6))))),
+         period = ifelse(substr(period1, start = nchar(period1), stop = nchar(period1))==
+                    substr(trt, start = nchar(trt), stop = nchar(trt)),1,
+                  ifelse(substr(period2, start = nchar(period2), stop = nchar(period2))==
+                    substr(trt, start = nchar(trt), stop = nchar(trt)),2,3)),
+         previous = ifelse(period==1, "A", 
+                           ifelse(period==2, period1, period2)))%>%
+  dplyr::select(.,-c(period1, period2, period3))%>%
+  # simplify the treatment covariate
+  mutate(.,treatment = substr(trt, start = nchar(trt), stop = nchar(trt)),
+         pre = substr(previous, start = nchar(previous), stop = nchar(previous)))%>%
+  dplyr::select(.,-c(trt, previous))%>%
+  mutate(.,seqnew = ifelse(seq == 1|seq == 4, 1,
+                           ifelse(seq == 2|seq == 5, 2,3)))
+########## done: primary.end is ok for primary analysis and spegetti plot seperated by period, gender
+######## secondary analysis 2 ok
+# PK- add ae, adherence, add some assumptions
+# focous on current status, no baseline, not reasonable
+base.long<- base%>%
+  as.tibble() %>%
+  select(.,-c(1))%>%
+  gather(type, pk, bviral0:sviral6) %>%
+  mutate(.,area = ifelse(substr(type, start = 1, stop = 1)=="s", "skin", "blood"),
+         stage = substr(type, start = 7, stop = 7))%>%
+  select(.,-type)%>%
+  mutate(.,seq = ifelse(period1=="Pill A"& period2 == "Gel B",1,
+                        ifelse(period1=="Gel C"& period2 == "Pill A",2,
+                               ifelse(period1 == "Gel B"& period2=="Gel C",3,
+                                      ifelse(period1 == "Gel B"& period2=="Pill A",4,
+                                             ifelse(period1== "Pill A"& period2 =="Gel C",5,6))))))%>%
+  select(.,-c(period1, period2, period3))
+base.selected <- base.long%>%
+  filter(.,stage == 0|stage == 1|stage == 3|stage == 5)
+# focus on the change of the variables
+base.long2<- base%>%
+  as.tibble() %>%
+  select(.,-c(1))%>%
+  # get the change of PK as outcome
+  mutate(.,
+         bv1 = bviral1-bviral0,
+         bv2 = bviral3-bviral2,
+         bv3 = bviral5-bviral4,
+         sv1 = sviral1-sviral0,
+         sv2 = sviral3-sviral2,
+         sv3 = sviral5-sviral4,
+         )%>%
+  select(.,-c(bviral0:sviral6))%>%
+  gather(type, pk, bv1:sv3) %>%
+  mutate(.,area = ifelse(substr(type, start = 1, stop = 1)=="s", "skin", "blood"),
+         stage = substr(type, start = 3, stop = 3))%>%
+  select(.,-type)%>%
+  mutate(.,seq = ifelse(period1=="Pill A"& period2 == "Gel B",1,
+                        ifelse(period1=="Gel C"& period2 == "Pill A",2,
+                               ifelse(period1 == "Gel B"& period2=="Gel C",3,
+                                      ifelse(period1 == "Gel B"& period2=="Pill A",4,
+                                             ifelse(period1== "Pill A"& period2 =="Gel C",5,6))))))%>%
+  select(.,-c(period1, period2, period3))
+covar <- primary.end %>%
+  group_by(ptid,period,treatment)%>%
+  summarise(ae = I(sum(AE)>=1), ad = sum(Adhere))%>%
+  mutate(., stage = ifelse(period==1, "1", 
+                            ifelse(period==2, "2", "3")))
+base.temp <- left_join(base.long2, covar)%>%
+  arrange(.,ptid)
+#### 1.2 plot of the outcome(primary and secondary) 
+# summary(primary.end) -AE logistic regression
+# hist(primary.end$Adhere)
+#### 1.3 longitudinal plot 
+# AE - plot sum over all patients
+ae.plot = primary.end%>%
+  group_by(.,period, week, treatment)%>%
+  summarise(.,count = sum(AE))
+p.ae <- ggplot(ae.plot, aes(fill=treatment, y=count, x=week)) + 
+  geom_bar(stat="identity") + 
+  scale_fill_brewer(palette = "Set3")+ 
+  theme(legend.position="bottom") + 
+  ylab("AE") + xlab("") +
+  facet_grid(.~period)
+# adherence - plot
+p.ad <- ggplot(data=primary.end, aes(x = week, y = Adhere, group = ptid)) +
+  geom_line(aes(colour = treatment)) + 
+  theme(legend.position="bottom") + 
+  ylab("Adherence") + xlab("") + 
+  facet_grid(.~period)
+# PK - plot
+p.pk <- ggplot(data=base.long, aes(x = stage, y = pk, group = ptid)) +
+  geom_line(aes(colour = factor(seq))) + 
+  theme(legend.position="bottom") + 
+  ylab("PK") + xlab("") +
+  labs(col="sequence") + 
+  facet_grid(.~area)
+# demographic - plot
+demo.plot <- base %>%
+  as.tibble() %>% 
+  select(.,c(ptid, period1, period2, period3, age,race, gender))%>%
+  mutate(.,seq = ifelse(period1=="Pill A"& period2 == "Gel B",1,
+                        ifelse(period1=="Gel C"& period2 == "Pill A",2,
+                               ifelse(period1 == "Gel B"& period2=="Gel C",3,
+                                      ifelse(period1 == "Gel B"& period2=="Pill A",4,
+                                             ifelse(period1== "Pill A"& period2 =="Gel C",5,6))))))%>%
+  select(.,-c(period1, period2, period3))
+t.gender <- demo.plot %>%
+  group_by(.,seq, gender)%>%
+  summarise(.,count = n())%>%
+  mutate(., gender = ifelse(gender==0, "male", "female"))
+t.race <- demo.plot %>%
+  group_by(.,seq, race)%>%
+  summarise(.,count = n())%>%
+  mutate(., race = factor(race))
+p.gender <- ggplot(t.gender, aes(fill=gender, y=count, x=seq)) + 
+  geom_bar(stat="identity") + 
+  scale_fill_brewer(palette = "Set3")
+p.race <- ggplot(t.race, aes(fill=race,y=count, x=seq)) + 
+  geom_bar(stat="identity") + 
+  scale_fill_brewer(palette = "Set3")
+p.age <- ggplot(data = demo.plot, aes(x = seq,y = age)) +
+    geom_boxplot(aes(fill = factor(seq)), col = "grey") +
+    scale_fill_brewer(palette = "Set3") +
+    labs(col="sequence") 
+ggarrange(p.gender, p.race, p.age,ncol=1, nrow=3)
+```
+
+
+
+## Visualization of treatment effect of adverse events
+
+```{r fig.height=6}
+ggarrange(p.ae, ncol=1, nrow=1)
+```
+
+## Visualization of treatment effect of adherence
+```{r fig.height=6}
+ggarrange(p.ad,  ncol=1, nrow=1)
+```
+
+## Visualization of treatment effect of PK
+```{r fig.height=6}
+ggarrange(p.pk, ncol=1, nrow=1)
+```
+
+## Primary Analysis
+- We will use mixed effects model to account for the correlation between subject
+
+   + random effects are often used to describe the subject-specific effect - random intercept $\beta_{i0}\sim N(\beta_{0}, \tau^2)$
+   + fixed effects are used to describe population-level effect, including the treatment effect, time effect, carryover effect and demographic covariate effect.
+   
+- Merge week outcomes because of convergence problem
+
+  + logistic regression for safety outcome: we define 0 to be no adverse events and 1 to be having adverse events
+  + poisson regression for adherence, with offset equal to 28
+
+## Primary Analysis Model fit
+
+- The primary covariates are defined as follows: 
+\[
+\begin{aligned}
+& x_1(x_2) = \left\{ \begin{array}{ll}
+ 1 & \textrm{period2(3)}\\
+ 0 & \textrm{otherwise}\\
+ \end{array} \right.
+x_3(x_4) = \left\{ \begin{array}{ll}
+ 1 & \textrm{treatment B(C)}\\
+ 0 & \textrm{otherwise}\\
+ \end{array} \right.\\
+&x_5(x_6) = \left\{ \begin{array}{ll}
+ 1 & \textrm{seq = CAB or ACB(BCA or CBA)}\\
+ 0 & \textrm{otherwise}\\
+ \end{array} \right.
+\end{aligned}
+\]
+
+- Adverse events model:
+\[
+logitP(Y1_{ij}=1) = \beta_{i0}+\beta_1x_{ij1}+\beta_2x_{ij2} + \beta_3x_{ij3}+\beta_4x_{ij4} + \beta_5x_{ij5} + \beta_6x_{ij6}\,\,(1)
+\]
+
+- Adherence model:
+\[
+\log Y2_{ij} = \beta_{i0}+\beta_1x_{ij1}+\beta_2x_{ij2} + \beta_3x_{ij3}+\beta_4x_{ij4} + \beta_5x_{ij5} + \beta_6x_{ij6}\,\,(2)
+\]
+where $j=1,2,3; i=1,\cdots, n=180$.
+
+## Primary Analysis Final Model 
+For both outcome adverse events and adherence, we need to:
+
+- First examine the carry over effect, if the cumulative carryover effect is not significantly different, we can use the whole dataset, otherwise, we can only use the first period data. 
+- Let $\rho_A, \rho_B, \rho_C$ denote the carryover effect of each medication, testing $H_0: \rho_A= \rho_B=\rho_C$, which is equivalent to test $H_0: \rho_A +  \rho_B=\rho_C + \rho_A= \rho_B+\rho_C$, this is also equivalent to(multiple tests and use Bonferroni adjustment.): 
+ \[
+ H_0: \beta_{5} = \beta_{6} = 0 \textrm{ versus } H_1:  \textrm{at least one of them is not } 0
+ \]
+
+ - Finalize the model and do the safety and adherence analysis by evaluating the period, treatment effects.
+ - Model fit checking
+
+## Secondary Analysis-correlation
+
+- We first assess the correlation by the traditional definition; 
+- Then we built a model to assess the association between PK and corresponding adverse events and adherence  using the linear mixed effect model. 
+\[
+\begin{aligned}
+P_{ij}
+& = \beta_{i0}+\beta_1x_{ij1}+\beta_2x_{ij2} + \beta_3x_{ij3}+\beta_4x_{ij4} \\
+& + \beta_7^T Z_{i} + \beta_{8}Y1_{ij} + \beta_{9}Y2_{ij}  + \epsilon_{ij}\,\,(3)
+\end{aligned}
+\]
+where $j=1,2,3; i=1,\cdots, n=180$ and  $\epsilon_{ij} \sim N(0,\sigma^2)$. 
+
+## Secondary Analysis-demographic effects
+
+- Interested in identifying demographic factors associated with product adherence as well as whether they differ by drug used. 
+- Created two new variables $M1=1$ indicating "gel" and $M2=1$ indicating once a day. 
+- Included the demographic factors denoted by $Z$ into model (2) and also test if there is any interaction
+\[
+\begin{aligned}
+\log Y_{ij}
+& = \beta_{i0} + \beta_7^T Z_{i} + \beta_8 M1_{ij} +  \beta_9 M2_{ij} + \beta_{10}^T Z_{i}M1_{ij} +  \beta_{11}^T Z_{i} M2_{ij}\,\,(4)
+\end{aligned}
+\]
+where $j=1,2,3; i=1,\cdots, n=180$. 
+
+# Result
+
+## Safety Analysis
+
+\tiny
+\begin{table}[!htbp] \centering 
+  \caption{Logistic Random Effects Model of Adverse Events} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}}lc} 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+ & \multicolumn{1}{c}{\textit{Dependent variable:}} \\ 
+\cline{2-2} 
+\\[-1.8ex] & ae \\ 
+\hline \\[-1.8ex] 
+ Intercept & $-$5.414$^{***}$ (1.505) \\ 
+  & \\ 
+ period2 & $-$0.446 (0.529) \\ 
+  & \\ 
+ period3 & 0.185 (0.494) \\ 
+  & \\ 
+ treatmentB & 0.264 (0.499) \\ 
+  & \\ 
+ treatmentC & $-$0.194 (0.518) \\ 
+  & \\ 
+ seqnew2 & $-$0.514 (0.876) \\ 
+  & \\ 
+ seqnew3 & 0.115 (0.835) \\ 
+  & \\ 
+\hline \\[-1.8ex] 
+Observations & 540 \\ 
+Log Likelihood & $-$141.916 \\ 
+Akaike Inf. Crit. & 299.832 \\ 
+Bayesian Inf. Crit. & 334.164 \\ 
+\hline 
+\hline \\[-1.8ex] 
+\textit{Note:}  & \multicolumn{1}{r}{$^{*}$p$<$0.1; $^{**}$p$<$0.05; $^{***}$p$<$0.01} \\ 
+\end{tabular} 
+\end{table} 
+
+## Interpretation of Safety Analysis
+
+- carryover effect: there is no statistically significant different cumulative carryover effects among sequnces.
+- period is not significant in advserse effects.
+- The safety is comparable among all three mediations. 
+  
+  + The odds of adverse events for treatment B is 1.302(95%CI: (0.490,3.595)) times the odds for treatment A after adjusting for other covariates. 
+  + The odds of adverse events for treatment C is 0.823(95%CI: (0.291,2.295)) times the odds for treatment A after adjusting for other covariates. 
+
+- We also found age is significantly associated with the adverse events in exploratory analysis.
+
+## Adherence Analysis
+
+\tiny
+\begin{table}[!htbp] \centering 
+  \caption{Poisson Random Effects Model of Adherence} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}}lc} 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+ & \multicolumn{1}{c}{\textit{Dependent variable:}} \\ 
+\cline{2-2} 
+\\[-1.8ex] & ad \\ 
+\hline \\[-1.8ex]
+ Intercept & $-$24.756$^{***}$ (0.034) \\ 
+  & \\ 
+ period2 & 0.009 (0.021) \\ 
+  & \\ 
+ period3 & $-$0.001 (0.022) \\ 
+  & \\ 
+ treatmentB & $-$0.167$^{***}$ (0.021) \\ 
+  & \\ 
+ treatmentC & $-$0.123$^{***}$ (0.021) \\ 
+  & \\ 
+ seqnew2 & 0.018 (0.041) \\ 
+  & \\ 
+ seqnew3 & 0.013 (0.041) \\ 
+  & \\ 
+\hline \\[-1.8ex] 
+Observations & 540 \\ 
+Log Likelihood & $-$1,644.592 \\ 
+Akaike Inf. Crit. & 3,305.184 \\ 
+Bayesian Inf. Crit. & 3,339.517 \\ 
+\hline 
+\hline \\[-1.8ex] 
+\textit{Note:}  & \multicolumn{1}{r}{$^{*}$p$<$0.1; $^{**}$p$<$0.05; $^{***}$p$<$0.01} \\ 
+\end{tabular} 
+\end{table} 
+
+## Interpretation of Adherence Analysis
+
+- carryover effect: there is no statistically significant different cumulative carryover effects among sequnces.
+- period is not significant in advserse effects.
+- The adherence is significantly different among all three mediations. 
+
+  + The rate of adherence for treatment B is 0.846(95%CI: (0.811,0.883)) times the rate for treatment A after adjusting for other covariates. 
+  + The rate of adherence for treatment C is 0.884(95%CI: (0.848,922)) times the rate for treatment A after adjusting for other covariates. 
+  + People tend to adhere to treatment A over others.
+  
+<!-- After accounting for period and sequence in our Poisson regression model, we conclude: -->
+<!-- \begin{itemize} -->
+<!-- \item Rate of adherence for treatment B is $e^{-.167} = 0.846$ relative to treatment A -->
+<!-- \item Rate of adherence for treatment C is $e^{-.123} = 0.884$ relative to treatment A -->
+<!-- \item People seem to adhere to treatment A over others. -->
+<!-- \end{itemize} -->
+
+## Correlation of PK with Adherence and the AE
+
+![](corr.png){width=60%}
+
+- Adverse events are positively correlated to the change of PK while adherence is negatively correlated both for skin and blood.
+
+- The decrease of PK get larger, and the probability of adverse events get smaller while the adherence will increase.
+<!-- \begin{itemize} -->
+<!-- \item PK and Adherence have low correlation ($\rho_{pk.skin} = -0.27$, $\rho_{pk.blood} = -0.20$) -->
+<!-- \item Mean PK measures between AE = 1 and AE = 0 groups differs significantly. On average, viral load is 48.214 IU/mL and 22.814 IU/mL greater for those who experience AE, on skin and blood, respectively.  -->
+<!-- \end{itemize} -->
+
+## Model of PK associated adverse events and adherence stratified by area
+In addition, we observe that PK is also significantly associated with treatment, age and gender. 
+
+  - Pill A has better performance than Gel B, Gel C in terms of reducing the viral load in both skin and blood; 
+  - younger and female patients will have larger PK decrease.
+
+![](pk.png){width=80%}
+
+
+## Demographic Factors with Adherence
+
+\tiny
+\begin{table}[!htbp] \centering 
+  \caption{Demographic Factors Associated with Adherence using LMER} 
+  \label{} 
+\begin{tabular}{@{\extracolsep{5pt}}lcc} 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+ & \multicolumn{2}{c}{\textit{Dependent variable:}} \\ 
+\cline{2-3} 
+\\[-1.8ex] & \multicolumn{2}{c}{ad} \\ 
+\\[-1.8ex] & Treatment (0:Pill, 1:Gel) & Regimen (0: 3 times, 1: once a day)\\ 
+\hline \\[-1.8ex] 
+ Intercent & 3.000$^{***}$ (0.075) & 2.098$^{***}$ (0.084) \\ 
+ period2 & 0.005 (0.022) & 0.008 (0.021) \\ 
+ period3 & $-$0.002 (0.022) & 0.001 (0.022) \\ 
+ age & 0.008$^{***}$ (0.002) & 0.030$^{***}$ (0.002) \\ 
+ use & $-$0.768$^{***}$ (0.085) &  \\ 
+ regimen &  & 0.600$^{***}$ (0.091) \\ 
+ raceothers & $-$0.022 (0.039) & $-$0.026 (0.042) \\ 
+ racewhite & $-$0.013 (0.041) & $-$0.001 (0.044)  \\ 
+ gender & 0.019 (0.033) & 0.038 (0.035) \\ 
+ age:use & 0.018$^{***}$ (0.002) &  \\ 
+ use:raceothers & 0.003 & (0.044)  \\ 
+ use:racewhite & 0.017 (0.046) &  \\ 
+ use:gender & 0.025 (0.037) &  \\ 
+ age:regimen &  & $-$0.015$^{***}$ (0.003) \\ 
+ regimen:raceothers &  & 0.007 (0.046) \\ 
+ regimen:racewhite &  & $-$0.002 (0.048) \\ 
+ regimen:gender &  & $-$0.005 (0.038) \\ 
+\hline \\[-1.8ex] 
+Observations & 540 & 540 \\ 
+Log Likelihood & $-$1,555.514 & $-$1,582.552 \\ 
+Akaike Inf. Crit. & 3,137.028 & 3,191.105 \\ 
+Bayesian Inf. Crit. & 3,192.819 & 3,246.895 \\ 
+\hline 
+\hline \\[-1.8ex] 
+\textit{Note:}  & \multicolumn{2}{r}{$^{*}$p$<$0.1; $^{**}$p$<$0.05; $^{***}$p$<$0.01} \\ 
+\end{tabular} 
+\end{table} 
+
+## Interpretation of Demographic Factors with Adherence analysis
+
+- Age is the only demographic factor significantly associated with adherence in both models (Treatment and Regimen).
+- Pill users adhere significantly better than gel users; Users that take treatment only once a day (Pill A, Gel C) adhere significantly better than users that must take treatment 3 times a day (Gel B).
+- There exists significant interaction.
+
+  + In the same pill or gel group, adherence rate of those who use treatment once a day is about 1.82 that of those who use treatment three times a day. 
+  + In the same regimen group, adherence rate for gel users is approximately half of pill users. 
+
+# Conclusion and Discussion
+
+## Conclusion-Primary analysis
+
+- No significant different cumulative carryover effect was detected. 
+- The analysis results above shows that all three medications are safe. 
+- Pill A has higher adherence than Gel B and Gel C. 
+
+  + Patients has higher adherence on Pill than on Gel; 
+  + Patients are more likely to be adherent if the medication is given once a day than three times a day. 
+  
+- In addition, older patients tent to have better adherence to treatment.
+
+## Conclusion-Secondary analysis
+
+- For pharmacoknetics, The decrease of PK get larger, and the probability of adverse events get smaller while the adherence will increase. 
+- Pill A has better performance than Gel B, Gel C in terms of reducing the viral load in both skin and blood. 
+- Younger and female patients will have larger PK decrease.
+
+## Discussion
+
+- Pill A is recommended for a next step Phase III trial because of better adherence and better efficacy. For the Phase III trial, a randomized, placebo-controlled, double blinded design is recommended. 
+- Since we observed the significant effct of age on adherence, it is necessary to do the stratification, i.e., randomize by age stratum.
+- subject recruitment and financial support.
+

@@ -1,0 +1,84 @@
+---
+title: "P9185 Group Project 3"
+subtitle: "A Study of DAR-0100A on Cognitive Deficits"
+author: "Soohyun Kim, Volha Tryputsen"
+date: "April 22, 2019"
+header-includes:
+- \usepackage{booktabs}
+- \usepackage{makecell}
+- \usepackage{indentfirst}
+- \usepackage{graphicx}
+- \usepackage{geometry}
+- \usepackage{subfigure}
+- \usepackage{amsmath}
+- \usepackage{listings}
+- \usepackage{tikz}
+- \usetikzlibrary{matrix}
+output:
+  beamer_presentation:
+    slide_level: 2
+    toc: false
+    theme: "Madrid"
+    colortheme: "whale"
+    fonttheme: "structurebold"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, comment = "")
+library(tidyverse)
+library(ggpubr) # common legend
+library(kableExtra) # table
+library(grid)
+library(gridExtra)
+options(knitr.table.format = "latex")
+theme_set(theme_bw())
+```
+
+# Introduction 
+## Background
+  
+## Objective
+
+
+
+# Method
+## Study Design
+## Data Description
+
+## MCAR vs. MAR
+
+\tiny
+\begin{table}[!htbp] \centering 
+  \caption{Testing MCAR vs. MAR using Logistc RE Model} 
+  \label{} 
+\small 
+\begin{tabular}{@{\extracolsep{5pt}}lc} 
+\\[-1.8ex]\hline 
+\hline \\[-1.8ex] 
+ & \multicolumn{1}{c}{\textit{Dependent variable:}} \\ 
+\cline{2-2} 
+\\[-1.8ex] & MEM\_comp \\ 
+\hline \\[-1.8ex] 
+ Constant & $-$1.409 (1.086) \\ 
+  Age & $-$0.028 (0.026) \\ 
+  GenderM & $-$0.476 (0.471) \\ 
+  Treatment\_GroupB & 0.267 (0.566) \\ 
+  Treatment\_GroupC & 0.092 (0.556) \\ 
+  Day & 0.023$^{***}$ (0.006) \\ 
+ \hline \\[-1.8ex] 
+Observations & 188 \\ 
+Log Likelihood & $-$71.688 \\ 
+Akaike Inf. Crit. & 157.376 \\ 
+Bayesian Inf. Crit. & 180.032 \\ 
+\hline 
+\hline \\[-1.8ex] 
+\textit{Note:}  & \multicolumn{1}{r}{$^{*}$p$<$0.1; $^{**}$p$<$0.05; $^{***}$p$<$0.01} \\ 
+\end{tabular} 
+\end{table} 
+
+## MCAR vs. MAR Cont'd
+
+Pattern of missing data depends on the observed data of the time variable. We now need to determine if data is MNAR.
+
+## MAR vs. MNAR
+
