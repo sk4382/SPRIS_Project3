@@ -300,8 +300,53 @@ lme1_out %>%
 
 anova(lme1)
 
+#------------contrasts -------------
 library(emmeans)
+contr <- emmeans(lme1, ~ day * treatment)
 
+
+# built contrasts----------------
+## for each day
+lme1_contr_day = emmeans(lme1, tukey ~ treatment|day, ref = "placebo")
+c1 = summary(lme1_contr_day)$contrasts
+
+c1 = 
+  c1 %>%
+  mutate(CI_lower =  estimate - 1.96* SE,
+         CI_upper =  estimate + 1.96*SE) %>%
+  select(-c(df, t.ratio))
+
+
+c1 %>%
+  kable(., digits = 3) %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                            full_width = F, position = "left")
+
+## for each treatment group
+lme1_contr_trt = emmeans(lme1, dunnett ~ day|treatment, ref = "0")
+c2 = summary(lme1_contr_trt)$contrasts
+
+c2 = 
+  c2 %>%
+  mutate(CI_lower =  estimate - 1.96* SE,
+         CI_upper =  estimate + 1.96*SE) %>%
+  select(-c(df, t.ratio))
+
+
+c2 %>%
+  kable(., digits = 3) %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                            full_width = F, position = "left")
+
+
+
+#-----------------------------------
+
+
+pairs(contr, by = "treatment")
+pairs(contr, by = "day")
+
+pwpp(contr, by = "treatment", type = "response")
 
 ```
 
