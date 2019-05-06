@@ -27,6 +27,8 @@ header-includes:
 - \usepackage{tikz}
 - \usetikzlibrary{matrix}
 - \usepackage{bm}
+editor_options: 
+  chunk_output_type: console
 ---
 
 ```{r setup, include = FALSE}
@@ -70,8 +72,8 @@ The dataset has 158 observations of the following six variables.
 
 # Objectives 
 
-The primary objective of the study was to assess whether DAR-0100A treatment at low (Treatment_Group = B in associated data) or high dose (Treatment_Group = C in associated data) compared to placebo (Treatment_Group = A in associated data) is able to improve memory as measured by the MEM_comp rating. The MEM_Comp is a computerized test that subjects take and higher values indicate better memory while lower values indicate poorer memory. Researchers were specifically interested in the **treatment effects at day 5, 19, and 90** and also in **whether the treatment effects differed over time**. Missing data were a concern. Researchers were also interested in *sensitivity analyses that can be used
-to assess the* **robustness of the missing data assumption**.
+The primary objective of the study was to assess whether DAR-0100A treatment at low (Treatment_group = B in associated data) or high dose (Treatment_group = C in associated data) compared to placebo (Treatment_group = A in associated data) is able to improve memory as measured by the MEM_comp rating. The MEM_comp is a computerized test that subjects take and higher values indicate better memory while lower values indicate poorer memory. Researchers were specifically interested in the treatment effects at day 5, 19, and 90 and also in whether the treatment effects differed over time. Missing data were a concern. Researchers were also interested in sensitivity analyses that can be used
+to assess the robustness of the missing data assumption.
 
 
 

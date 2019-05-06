@@ -87,12 +87,21 @@ dat %>%
 
 ## Separate demographics  
 ```{r}
+dat %>%
+  filter(day == "0") %>%
+  group_by(treatment) %>%
+  summarize(n = n(), mean_age = mean(age), sd_age = sd(age),
+            n_female = sum(gender == "F"), n_male = sum(gender == "M")) %>%
+        kable(., caption = "Table 1", digits = 0) %>%
+        kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                              full_width = F, position = "left")
+
 dat_dem = 
   dat %>%
   select(c(id, age, gender, treatment)) %>%
   distinct()
   
-# also has BL scores
+# baseline data
 dat_dem_bl = 
   dat %>%
   filter(day == 0) %>%
@@ -144,13 +153,6 @@ dat_miss %>%
   kable(., caption = "Table 2", digits = 3) %>%
   kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
                               full_width = F, position = "left")
-
-# barchart of count for each treatment group
-dat_miss %>%
-  ggplot(aes(x = n, fill= treatment))+
-  geom_bar()+
-  theme_bw() +
-  facet_grid(~treatment)
 ```
 
 code missing values with NA`s  
@@ -174,15 +176,6 @@ dat_na =
   left_join(y = dat_miss, by = "id") %>%
   distinct()
 
-
-dat_na %>%
-  mutate(n = as.factor(n.x)) %>%
-  ggplot(aes(x = id, y = n.x, color = treatment)) +
-  geom_point() +
-  facet_grid(~treatment) +
-  theme_bw() 
-
-dim(dat_na)
 ```
 
 
@@ -196,6 +189,7 @@ dat %>%
   geom_point(alpha = 0.3, size = 1) +
   facet_grid(~treatment) +
   theme_bw() +
+  ylab("memory score") +
   theme(legend.position = "none") 
 ```
 
@@ -211,6 +205,7 @@ dat %>%
   geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width=1) +
   geom_line() + 
   geom_point() + 
+  ylab("mean memory score") +
   theme_bw() 
 ```
 
@@ -229,42 +224,6 @@ summary(aov(mem_comp_bl ~ treatment, data = dat_dem_bl)) # no differences
 ```
 
 
-Calculate differences from baseline  
-```{r}
-dat_diff = 
-  dat %>%
-  left_join(., y = dat_dem_bl[,c("id", "mem_comp_bl")], by = "id") %>%
-  mutate(mem_comp_diff = mem_comp - mem_comp_bl) #%>%
-  #filter(day %in% c(5,19,90))
-```
-
-
-Spaghheti plot of differences   
-```{r}
-dat_diff %>%
-  ggplot(aes(x = day, y = mem_comp_diff, colour = id)) +
-  geom_line() +
-  geom_point(alpha = 0.3, size = 1) +
-  facet_grid(~treatment) +
-  theme_bw() +
-  theme(legend.position = "none") 
-```
-
-
-Mean spaghetti plots of differences  
-```{r}
-dat_diff %>%
-  as_tibble() %>%
-  group_by(treatment, day) %>% 
-  dplyr::summarise(n=n(), mean = mean(mem_comp_diff), sd = sd(mem_comp_diff)) %>%
-  mutate(se = sd/sqrt(n), mean = round(mean, 2)) %>%
-  ggplot(aes(x = day, y = mean, label = n, colour = treatment)) + 
-  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width=1) +
-  geom_line() + 
-  geom_point() + 
-  theme_bw() 
-```
-
 
 
 
@@ -275,31 +234,30 @@ dat_diff %>%
 dat_all = 
   dat_all %>%
   mutate(missing = ifelse(is.na(mem_comp), 0, 1),
-         missing = as.factor(missing))
-
-
-dat_all
+         missing = as.factor(missing),
+         day = day)
 
 ##fit the logistic regression with random effect 
-m1 <- glmer(missing ~ age + gender + as.factor(day) + treatment + (1|id), data = dat_all, family = binomial)
+m1 <- glmer(missing ~ age + gender + day + treatment + (1|id), data = dat_all, family = binomial)
 m1_sum = summary(m1)
 
-##fit the logistic regression with random effect 
-m1 <- glmer(missing ~  day + (1|id), data = dat_all, family = binomial)
-m1_sum = summary(m1)
 
 m1_out = round(cbind(estimate = m1_sum$coefficients[,1], SE = m1_sum$coefficients[,2], 
       p_value = m1_sum$coefficients[,4], exp_est = exp(m1_sum$coefficients[,1]), 
       exp_est_lb =  exp(m1_sum$coefficients[,1] - 1.96*m1_sum$coefficients[,2]),
       exp_est_ub =  exp(m1_sum$coefficients[,1] + 1.96*m1_sum$coefficients[,2])), 4)[-1,]
 
+rownames(m1_out) <-  c("age", "male", "day","low_dose", "high_dose")
+
 m1_out %>%
-kable(., digits = 3) %>%
-        kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
-                              full_width = F, position = "left")
+  kable(., digits = 3, caption = "Table 3") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                            full_width = F, position = "left")
 ```
 
 Day is significant, therefore MCAR is not true.  
+
+
 
 
 ## MAR and LME    
@@ -323,11 +281,32 @@ AIC(lme1, lme1_ar1, lme1_comp_symm)
 BIC(lme1, lme1_ar1, lme1_comp_symm)
 
 
-summary(lme1)$tTable
+lme1_sum = summary(lme1)$tTable
+
+
+lme1_out = round(cbind(estimate = lme1_sum[,1], SE = lme1_sum[,2], 
+      p_value = lme1_sum[,5], 
+      CI_lower =  lme1_sum[,1] - 1.96*lme1_sum[,2],
+      CI_upper =  lme1_sum[,1] + 1.96*lme1_sum[,2]), 4)
+
+rownames(lme1_out) <-  c("(Intercept)","day5", "day19", "day90","low_dose", "high_dose",
+                         "age","male", "day5:low_dose", "day19:low_dose", "day90:low_dose",
+                         "day5:high_dose","day19:high_dose", "day90:high_dose")
+
+lme1_out %>%
+  kable(., digits = 3, caption = "Table 4") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                            full_width = F, position = "left")
+
+anova(lme1)
+
+library(emmeans)
+
+
 ```
 
 Diagnostics
-```{r }
+```{r eval = FALSE}
 model = lme1
 lme_plot <- data.frame(datf,
                        residuals = residuals(model),
@@ -387,174 +366,9 @@ ggplot(data = lme_plot, aes(x = fitted, y = observed, color = treatment))+
 qqnorm(lme1, ~ranef(.))
 ```
 
-Final model:    
-```{r}
-my_model = summary(lme1)$tTable
-my_model %>%
-      kable(., caption = "Table 3", digits = 4) %>%
-      kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
-                              full_width = F, position = "left")
-```
 
 
 
-### (m2) mem_comp ~ baseline + predictors  ***  
-
-```{r}
-#dat_m2 = 
-#  dat_diff %>%
-#  mutate(day = as.factor(day)) %>%
-#  filter(day %in% c(5,19,90))
-
-dat_m2 = 
-  dat_diff %>%
-  mutate(day = as.factor(day))
-
-#random intercept
-lme2 <- lme(mem_comp ~ mem_comp_bl + day*treatment + age + gender, random=~1|id, data = dat_m2)
-AIC(lme2)
-
-lme2_ar1 = try(update(lme2, corr = corAR1()))
-lme2_comp_symm = try(update(lme2, corr = corCompSymm()))
-AIC(lme2, lme2_ar1, lme2_comp_symm)
-BIC(lme2, lme2_ar1, lme2_comp_symm)
-
-
-# final model is random intercept with uncorrelated residuals and random effects
-lme2_sum = summary(lme2)
-# only treatment with high dose is different from placebo at day 5 and day 19, compaed to BL
-
-lme2_out = round(cbind(estimate = lme2_sum$tTab[,1], SE = lme2_sum$tTab[,2], 
-                     p_value = lme2_sum$tTab[,5], 
-                     est_lb =  lme2_sum$tTab[,1] - 1.96*lme2_sum$tTab[,2],
-                     est_ub =  lme2_sum$tTab[,1] + 1.96*lme2_sum$tTab[,2]), 4)
-lme2_out %>%
-  kable(., digits = 3) %>%
-  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
-                              full_width = F, position = "left")
-```
-
-
-### (m3) mem_comp_diff ~ predictors  
-
-```{r}
-#random intercept
-lme3 <- lme(mem_comp_diff ~ day*treatment + age + gender, random=~1|id, data = dat_m2)
-AIC(lme3)
-
-lme3_ar1 = try(update(lme3, corr = corAR1()))
-lme3_comp_symm = try(update(lme3, corr = corCompSymm()))
-AIC(lme3, lme3_ar1, lme3_comp_symm)
-BIC(lme3, lme3_ar1, lme3_comp_symm)
-
-
-# final model is random intercept with uncorrelated residuals and random effects
-round(summary(lme3)$tTable,3)
-# only treatment with high dose is different from placebo at day 5 and day 19, compaed to BL
-
-```
-
-
-
-### (m4) mem_comp_diff ~ baseine + predictors  
-
-```{r}
-#random intercept
-lme4 <- lme(mem_comp_diff ~ mem_comp_bl + day*treatment + age + gender, random=~1|id, data = dat_m2)
-AIC(lme4)
-
-lme4_ar1 = try(update(lme4, corr = corAR1()))
-lme4_comp_symm = try(update(lme4, corr = corCompSymm()))
-AIC(lme4, lme4_ar1, lme4_comp_symm)
-BIC(lme4, lme4_ar1, lme4_comp_symm)
-
-
-# final model is random intercept with uncorrelated residuals and random effects
-round(summary(lme4)$tTable,3)
-# only treatment with high dose is different from placebo at day 5 and day 19, compaed to BL
-
-```
-
-
-### (m5)
-```{r}
-dat_m5 = 
-  dat_diff %>%
-  filter(day %in% c(5,19,90))
-
-#random intercept
-lme5 <- lme(mem_comp ~ mem_comp_bl + day*treatment + age + gender, random=~1|id, data = dat_m5)
-AIC(lme5)
-
-round(summary(lme5)$tTable,3)
-```
-
-
-Diagnostics
-```{r }
-model = lme5
-lme_plot <- data.frame(dat_m5,
-                       residuals = residuals(model),
-                        fitted = fitted(model),
-                        observed = dat_m5$mem_comp)
-
-## Residual Histogram
-ggplot(lme_plot, aes(x = residuals)) +
-  geom_histogram(bins = 40, aes(y = ..density..),
-                 fill = "black", color = "white") +
-  stat_function(fun = dnorm, 
-                args = list(mean = mean(lme_plot$residuals),
-                            sd = sd(lme_plot$residuals)), col = "red",linetype = "dashed") +
-  theme_bw() +
-  xlab("Residuals") +
-  ylab("Density") +
-  ggtitle("Histogram of Residuals") 
-
-
-
-## Residual Q-Q Plot
-  y <- quantile(lme_plot$residuals, c(0.25, 0.75)) # Find the 1st and 3rd quartiles
-  x <- qnorm( c(0.25, 0.75))     # Find the matching normal values on the x-axis
-  slope <- diff(y) / diff(x)     # Compute the line slope
-  int <- y[1] - slope * x[1]     # Compute the line intercept
-ggplot(lme_plot, aes(sample = residuals)) +
-  stat_qq(distribution = qnorm) +
-  geom_abline(intercept = int, slope = slope, color = "red", linetype = "dashed") + 
-  theme_bw() +
-  ggtitle("Q-Q Plot of Residuals") +
-  xlab("Theoretical") +
-  ylab("Sample") 
-
-  
-  ## Fitted vs. Residuals Scatter Plot
-ggplot(data = lme_plot, aes(x = fitted, y = residuals)) +
-    geom_point() +
-    geom_smooth(method = "loess") +
-    geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
-    ggtitle("Fitted vs. Residuals") +
-  theme_bw() +
-    xlab("Fitted") +
-    ylab("Residuals") +
-    guides(color = FALSE)
-
-## Fitted vs. Observed Scatter Plot
-ggplot(data = lme_plot, aes(x = fitted, y = observed, color = treatment))+
-  geom_point() +
-    geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
-    ggtitle("Fitted vs. Observed") +
-    theme(legend.position="none") +
-  theme_bw() +
-    xlab("Fitted") +
-    ylab("Observed") 
-
-
-qqnorm(lme5, ~ranef(.))
-```
-
-
-
-
-## MAR mice   
 
 ```{r}
 library(mice)
@@ -596,7 +410,7 @@ f_clean <- function(x){
   separate(variable, into = c("out", "day")) %>%
   select(-out) %>%
   dplyr::rename(mem_comp_imp = value) %>%
-  left_join(., y = dat_dem_bl[,c("id", "age", "gender", "day_bl")], by = "id") %>%
+  left_join(., y = dat_dem_bl[,c("id", "age", "gender")], by = "id") %>%
   mutate(treatment = forcats::fct_relevel(treatment, "placebo", "low_dose", "high_dose"),
          day = forcats::fct_relevel(day, "0", "5", "19", "90"))
 } 
@@ -612,7 +426,7 @@ imp.data1[[1]]
 #})
 
 imp.fit <- lapply(imp.data1, FUN=function(x){
-  lme(mem_comp_imp ~ day_0 + day*treatment + age + gender, random=~1|id, data = x)
+  lme(mem_comp_imp ~ day*treatment + age + gender, random=~1|id, data = x)
   #lme(value ~ as.numeric(variable)+(1|id), data=x) 
 })
 
@@ -631,117 +445,133 @@ pool_out %>%
 
 ```
 
-### imputed data
-#### 1
-```{r eval=FALSE}
-d1 = imp.data[[1]]
-head(d1)
-d1 = d1 %>% 
-  separate(variable, into = c("out", "day")) %>%
-  select(-out) %>%
-  mutate(day = as.numeric(day),
-         mem_comp = value)
 
 
-d1 %>%
-  ggplot(aes(x = day, y = mem_comp, colour = id)) +
-  geom_line() +
-  geom_point(alpha = 0.3, size = 1) +
-  facet_grid(~treatment) +
-  theme_bw() +
-  theme(legend.position = "none") 
-
-d1 %>%
-  as_tibble() %>%
-  group_by(treatment, day) %>% 
-  dplyr::summarise(n=n(), mean = mean(mem_comp), sd = sd(mem_comp)) %>%
-  mutate(se = sd/sqrt(n), mean = round(mean, 2)) %>%
-  ggplot(aes(x = day, y = mean, label = n, colour = treatment)) + 
-  geom_errorbar(aes(ymin = mean - se, ymax = mean + se), width=1) +
-  geom_line() + 
-  geom_point() + 
-  theme_bw() 
-```
-
-
-
-
-# MNAR
 
 ```{r}
-dat_m2 %>% head()
+datf %>% head()
 
 miss_indx = NA
 # create an indicator of missingness - if subject has missing data - assign 1
-miss_indx[dat_m2$id %in% dat_na$id] = 1
-miss_indx[!(dat_m2$id %in% dat_na$id)] = 0
+miss_indx[datf$id %in% dat_na$id] = 1
+miss_indx[!(datf$id %in% dat_na$id)] = 0
+table(datf$id)
 
-dat_m2 = cbind(dat_m2, miss_indx = as.factor(miss_indx))
+datf = cbind(datf, miss_indx = as.factor(miss_indx))
 
 # mean mem score for different drop-out category for each treatment and day
-dat_m2 %>%
+datf %>%
   group_by(treatment, day, miss_indx) %>%
   summarize(mean = mean(mem_comp)) %>%
   spread(key = day, value = mean)
 
 # n for different drop-out category for each treatment and day
-dat_m2 %>%
+datf %>%
   group_by(treatment, day, miss_indx) %>%
   summarize(n = n()) %>%
   spread(key = day, value = n)
 
 
 #to determine how the drop-out times should be grouped, we fit a linear mixed model with all of the covariates interacted with drop-out indicators
-lme_drop <- lme(mem_comp ~ mem_comp_bl*miss_indx + day*miss_indx + treatment*miss_indx + age*miss_indx +
-                  gender*miss_indx, random=~1|id, data = dat_m2)
+lme_drop <- lme(mem_comp ~ day*miss_indx + treatment*miss_indx + age*miss_indx +
+                  gender*miss_indx, random=~1|id, data = datf)
 summary(lme_drop)
 
 
 # check out drop out patterns:
 md.pattern(dat_sh)
-
-# pattern 1: missing data at day 90 only
-p1_id = dat_sh$id [!is.na(dat_sh$day_5) & !is.na(dat_sh$day_19) & is.na(dat_sh$day_90)] 
-
-# pattern 2: missing data prior to day 90
-p2_id = dat_sh$id [(is.na(dat_sh$day_5) | is.na(dat_sh$day_19)) | (is.na(dat_sh$day_19) & is.na(dat_sh$day_90))] 
-
-
-dat_p1 = dat_m2[dat_m2$id %in% p1_id, ] 
-dat_p2 = dat_m2[dat_m2$id %in% p2_id, ] 
-
-#fit lme for each pattern:
-#pattern 1 - drop out at day 90
-lme_drop_p1 <- lme(mem_comp ~ mem_comp_bl + day*treatment + age + gender, random=~1|id, data = dat_p1)
-summary(lme_drop_p1)
-
-#pattern 2 - produces cingularity 
-lme_drop_p2 <- lme(mem_comp ~ mem_comp_bl + day*treatment + age + gender, random=~1|id, data = dat_p2)
-summary(lme_drop_p2)
 ```
+
 
 Restructure patterns  
 ```{r}
 # check out drop out patterns:
 md.pattern(dat_sh)
 
+#----------------------------------------
 # pattern 3: missing data for at least one f/up
 p3_id = dat_sh$id [is.na(dat_sh$day_5) | is.na(dat_sh$day_19) | is.na(dat_sh$day_90)] 
-dat_p3 = dat_m2[dat_m2$id %in% p3_id, ] 
+dat_p3 = datf[datf$id %in% p3_id, ] 
 dat_p3$id %>% unique() # 23 subjects
 
 #fit lme for pattern 3:
 #pattern 3
-lme_drop_p3 <- lme(mem_comp ~ mem_comp_bl + day*treatment + age + gender, random=~1|id, data = dat_p3)
-round(summary(lme_drop_p3)$tTab,3)
+lme_drop_p3 <- lme(mem_comp ~ day*treatment + age + gender, random=~1|id, data = dat_p3)
+lm3_drop_p3_sum = round(summary(lme_drop_p3)$tTab,3)
+
+rownames(lm3_drop_p3_sum) <-  c("(Intercept)","day5", "day19", "day90","low_dose", "high_dose",
+                         "age","male", "day5:low_dose", "day19:low_dose", "day90:low_dose",
+                         "day5:high_dose","day19:high_dose", "day90:high_dose")
+
+lm3_drop_p3_sum %>%
+  kable(., digits = 3, caption = "Table 5") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                            full_width = F, position = "left")
+
+mm = lm3_drop_p3_sum
+round(cbind(estimate = mm[,1], SE = mm[,2], 
+      p_value = mm[,5], 
+      CI_lower =  mm[,1] - 1.96*mm[,2],
+      CI_upper =  mm[,1] + 1.96*mm[,2]), 4)
+#-------------------------------------------
 
 
 #pattern 4 - no drop out 
-dat_p4 = dat_m2[!dat_m2$id %in% p3_id, ] 
-dat_p4$id %>% unique() # 23 subjects
+dat_p4 = datf[!datf$id %in% p3_id, ] 
+dat_p4$id %>% unique() # 24 subjects
 
-lme_drop_p4 <- lme(mem_comp ~ mem_comp_bl + day*treatment + age + gender, random=~1|id, data = dat_p4)
-round(summary(lme_drop_p4)$tTab,3)
+lme_drop_p4 <- lme(mem_comp ~ day*treatment + age + gender, random=~1|id, data = dat_p4)
+lme_drop_p4_sum = round(summary(lme_drop_p4)$tTab,3)
+
+
+rownames(lme_drop_p4_sum) <-  c("(Intercept)","day5", "day19", "day90","low_dose", "high_dose",
+                         "age","male", "day5:low_dose", "day19:low_dose", "day90:low_dose",
+                         "day5:high_dose","day19:high_dose", "day90:high_dose")
+
+lme_drop_p4_sum %>%
+  kable(., digits = 3, caption = "Table 5") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                            full_width = F, position = "left")
+
+mm = lme_drop_p4_sum
+round(cbind(estimate = mm[,1], SE = mm[,2], 
+      p_value = mm[,5], 
+      CI_lower =  mm[,1] - 1.96*mm[,2],
+      CI_upper =  mm[,1] + 1.96*mm[,2]), 4)
+#-------------------------------------------------------------
+
+
+
+# create an indicator of a patter: 1 = at least one is missing, 0 = no drop out
+dat_sh$pattern[is.na(dat_sh$day_5) | is.na(dat_sh$day_19) | is.na(dat_sh$day_90)] <- 1
+dat_sh$pattern[!is.na(dat_sh$day_5) & !is.na(dat_sh$day_19) & !is.na(dat_sh$day_90)] <- 0
+table(dat_sh$pattern)
+
+datff = 
+  datf %>%
+  left_join(dat_sh[,c("id", "pattern")], by = "id")
+
+lme_drop_p5 <- lme(mem_comp ~ day*treatment*pattern + age*pattern + gender*pattern, random=~1|id, data = datff)
+lme_drop_p5_sum = round(summary(lme_drop_p5)$tTab,3)
+
+
+
+lme_drop_p5_sum %>%
+  kable(., digits = 3, caption = "Table 5") %>%
+  kableExtra::kable_styling(bootstrap_options = c("striped", "hover",  "condensed", "responsive"), 
+                            full_width = F, position = "left")
+
+mm = lme_drop_p5_sum
+round(cbind(estimate = mm[,1], SE = mm[,2], 
+      p_value = mm[,5], 
+      CI_lower =  mm[,1] - 1.96*mm[,2],
+      CI_upper =  mm[,1] + 1.96*mm[,2]), 4)
 
 ```
+
+
+
+
+
+
 
